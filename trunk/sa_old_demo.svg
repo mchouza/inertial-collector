@@ -1,0 +1,577 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" onload="window.setTimeout(startup, 100, evt)">
+	<script><![CDATA[
+	// Documento SVG
+	var doc = null;
+	
+	// Namespace SVG
+	var svgNS = 'http://www.w3.org/2000/svg';
+	
+	// Raíz del árbol DOM
+	var root = null;
+	
+	// Botones de la interfaz
+	var resetButton = null;
+	var startButton = null;
+	var pauseButton = null;
+	
+	// ID del timer
+	var timerID = 0;
+	
+	// Problema
+	var tsp = null;
+	
+	// Número de paso
+	var step = 0;
+	
+	// Cantidad de pasos a dar
+	var stepNumber = 200;
+	
+	// Historial de puntajes
+	var scoringHistory = new Array();
+	
+	// Obtiene el factorial de un número
+	function factorial(n)
+	{
+		var fac = 1;
+		
+		for (i=2; i<=n; i++)
+		{
+			fac *= i;
+		}
+		
+		return fac;
+	}
+	
+	// Obtiene la distancia entre dos posiciones
+	function getDist(pos1, pos2)
+	{
+		var deltaX = pos2[0] - pos1[0];
+		var deltaY = pos2[1] - pos1[1];
+		return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+	}
+	
+	// Obtiene una permutación aleatoria de los números enteros en [lo, hi)
+	function getRandomPermutation(lo, hi)
+	{
+		var n = hi - lo;
+		var permutation = new Array();
+		
+		for (i=0; i<n; i++)
+		{
+			permutation[i] = i + lo;
+		}
+		
+		for (i=0; i<n-1; i++)
+		{
+			var randomIndex = Math.floor(Math.random() * n);
+			var tmp = permutation[i];
+			permutation[i] = permutation[randomIndex];
+			permutation[randomIndex] = tmp;
+		}
+		
+		return permutation;
+	}
+	
+	// Realiza el intercambio en forma aleatoria
+	function randomExchange(oldPath)
+	{
+		// Cantidad de ciudades
+		var n = oldPath.length;
+		
+		// Nuevo camino
+		var newPath = oldPath.slice(0, n);
+		
+		// Selecciono 2 índices al azar
+		var i = Math.floor(Math.random() * n);
+		var j = Math.floor(Math.random() * n);
+		
+		// Realizo el intercambio
+		var tmp = newPath[i];
+		newPath[i] = newPath[j];
+		newPath[j] = tmp;
+		
+		// Devuelvo el nuevo camino
+		return newPath;
+	}	
+	
+	// Obtiene el largo de un tour (el camino se cierra para obtener el tour)
+	function getTourLength(citiesPos, path)
+	{
+		var tourLength = 0;
+		var n = path.length;
+		
+		for (i=0; i<n; i++)
+		{
+			tourLength += getDist(citiesPos[path[i]], citiesPos[path[(i+1) % n]]);
+		}
+		
+		return tourLength;
+	}	
+	
+	// Obtiene la temperatura a partir del paso
+	function getTemperatureFromStep(step)
+	{
+		// Hago un decrecimiento lineal de la temperatura
+		return 100 * (Math.exp(-step / stepNumber) - Math.exp(-1));
+	}
+
+	// Obtiene el color de la temperatura correspondiente
+	function getTemperatureColor(temp)
+	{
+		// Obtengo las componentes RGB básicas
+		var r = Math.floor(Math.pow(temp / 180, 2));
+		var g = Math.floor(Math.pow(temp / 300, 2));
+		var b = Math.floor(Math.pow(temp / 400, 2));
+		
+		// Corto en 255
+		r = (r > 255) ? 255 : r;
+		g = (g > 255) ? 255 : g;
+		b = (b > 255) ? 255 : b;
+		
+		// Devuelvo la cadena
+		return 'rgb(' + r + ',' + g + ',' + b + ')';
+	}
+	
+	// Actualiza al indicador de progreso
+	function updateProgressIndic()
+	{
+		// Obtengo el relleno
+		fillRect = doc.getElementById('progressIndicFill');
+		
+		// Le pongo el ancho que corresponda
+		fillRect.setAttribute('width', 400 * step / (stepNumber - 1));
+		
+		// Le pongo el color que corresponda
+		fillRect.setAttribute('fill', getTemperatureColor(getTemperatureFromStep(step) * 130));
+	}
+	
+	// Realiza un paso del recocido simulado
+	function doStep()
+	{
+		// Hago el paso de optimización
+		tsp.annealingStep(getTemperatureFromStep(step));
+		
+		// Actualizo la pantalla
+		tsp.update();
+		
+		// Actualizo el indicador de progreso
+		updateProgressIndic();
+		
+		// Marco que hice el paso
+		step++;
+		
+		// Si llegué al límite, paro
+		if (step >= stepNumber)
+			endAnnealing();
+	}
+	
+	// Resetea el problema
+	function reset()
+	{
+		// Activo el botón de reset
+		resetButton.enable();
+	
+		// Activo el botón de arranque
+		startButton.enable();
+		
+		// Desactivo el botón de pausa
+		pauseButton.disable();
+		
+		// Apago el timer
+		if (timerID != 0)
+		{
+			clearInterval(timerID);
+			timerID = 0;
+		}
+		
+		// Pongo el step en 0
+		step = 0;
+		
+		// Limpio el historial
+		scoringHistory = new Array();
+		
+		// Pongo ciudades y un nuevo camino aleatorios
+		tsp.randomizeCitiesPos();
+		tsp.randomizePath();
+		
+		// Actualizo los gráficos
+		tsp.update();
+		
+		// Actualizo el indicador de progreso
+		updateProgressIndic();
+	}
+	
+	// Inicia el recocido simulado
+	function startAnnealing()
+	{
+		// Desactivo el botón para arrancar
+		startButton.disable();
+		
+		// Activo el botón de pausa
+		pauseButton.enable();
+		
+		// Arranco el timer
+		timerID = setInterval('doStep()', 100);
+	}
+	
+	// Realiza una pausa en el proceso de recocido simulado
+	function pauseAnnealing()
+	{
+		// Vuelvo a activar el botón de arranque
+		startButton.enable();
+		
+		// Desactivo el botón de pausa
+		pauseButton.disable();
+		
+		// Detengo el timer
+		clearInterval(timerID);
+		timerID = 0;
+	}
+	
+	// Detiene el proceso
+	function endAnnealing()
+	{
+		// Es igual que la pausa...
+		pauseAnnealing();
+		
+		// ...pero sin poder volver a arrancarse
+		startButton.disable();
+		
+		// Guardo la última longitud en el historial
+		scoringHistory[scoringHistory.length] = getTourLength(citiesPos, tsp.path);
+	}
+	
+	// Muestra las estadísticas si se presionó el botón izquierdo
+	function showStats(evt)
+	{
+		// Si presiono el botón izquierdo...
+		if (evt.button == 0)
+		{
+			// ...muestro las estadísticas
+			var newWindow = window.open();
+			newWindow.document.write(scoringHistory);
+			newWindow.document.close();
+		}
+		// Si presiono el botón central...
+		else if (evt.button == 1)
+		{
+			// ...muestro una captura de imagen en SVG
+			
+			// Obtengo el serializer
+			var serializer = new XMLSerializer();
+			
+			// Obtengo un string representando el documento en su estado actual
+			var svgAsTxt = serializer.serializeToString(doc);
+			
+			// Abro la nueva ventana con una URL con esquema "data"
+			var newWindow = window.open('data:image/svg+xml,' + svgAsTxt);
+		}
+	}
+	
+	//
+	// Clase TSP
+	//
+
+	// Colores
+	TSP.prototype.cityDarkColor = '#665555';
+	TSP.prototype.cityClearColor = '#ccaaaa';
+	
+	// Realizo un paso de annealing
+	TSP.prototype.annealingStep = function(temperature)
+	{	
+		// Obtengo un nuevo tour en forma aleatoria
+		newPath = randomExchange(this.path);
+		
+		// Obtengo las longitudes
+		var oldLength = getTourLength(this.cities, this.path);
+		var newLength = getTourLength(this.cities, newPath);
+		
+		// Obtengo el 'delta', igual a la diferencia en longitudes
+		var delta = newLength - oldLength;
+		
+		// Si es más corto lo tomo siempre. Si es más largo, lo tomo con probabilidad exp(-delta/temp),
+		// siendo delta la diferencia de longitudes y temp la temperatura. No tiene sentido usar constantes
+		// extra, ya que podemos normalizar la temperatura.
+		if (delta < 0 || (temperature > 0 && Math.random() <= Math.exp(-delta/temperature)))
+		{
+			// Agrego el largo al historial
+			scoringHistory[scoringHistory.length] = oldLength;
+			
+			// Reemplazo el camino
+			this.path = newPath;
+		}
+	}
+	
+	// Calcula el mejor camino
+	TSP.prototype.calcBestPath = function()
+	{
+		this.bestPath = getBestTour(this.cities);
+	}
+	
+	// Actualiza los gráficos
+	TSP.prototype.update = function()
+	{
+		var numCities = this.cities.length;
+		
+		// Actualizo las líneas
+		for (i=0; i<numCities; i++)
+		{
+			var l = this.pathLines[i];
+			l.setAttribute('x1', this.cities[this.path[i]][0]);
+			l.setAttribute('y1', this.cities[this.path[i]][1]);
+			l.setAttribute('x2', this.cities[this.path[(i+1)%numCities]][0]);
+			l.setAttribute('y2', this.cities[this.path[(i+1)%numCities]][1]);
+		}
+		
+		// Actualizo los rectángulos de las ciudades
+		for (i=0; i<numCities; i++)
+		{
+			var city = this.cities[i];
+			var c = this.cityRects[i];
+			c.setAttribute('x', city[0]-5);
+			c.setAttribute('y', city[1]-5);
+		}
+	}
+	
+	// Les da posiciones aleatorias a las ciudades
+	TSP.prototype.randomizeCitiesPos = function()
+	{
+		// Obtengolas coordenadas de la BB
+		var x1 = this.citiesBB[0][0];
+		var x2 = this.citiesBB[1][0];
+		var y1 = this.citiesBB[0][1];
+		var y2 = this.citiesBB[1][1];
+		
+		// Elijo posiciones aleatorias dentro de ella
+		for (i=0; i<this.cities.length; i++)
+		{
+			this.cities[i][0] = Math.random() * (x2 - x1) + x1;
+			this.cities[i][1] = Math.random() * (y2 - y1) + y1;
+		}
+	}
+	
+	// Hace un nuevo circuito aleatorio
+	TSP.prototype.randomizePath = function()
+	{
+		// Cantidad de ciudades
+		var numCities = this.cities.length;
+		
+		// Obtengo un camino que pasa por todas las ciudades (es un tour al cerrarlo)
+		this.path = getRandomPermutation(0, numCities);
+	}
+	
+	// Constructor a partir de la cantidad y la "bounding box"
+	function TSP(numCities, x1, y1, x2, y2)
+	{
+		// Creo el array de las ciudades
+		this.cities = new Array(numCities);
+		
+		// Creo el array del camino
+		this.path = new Array(numCities);
+		
+		// Creo el array con los rectángulos de las ciudades
+		this.cityRects = new Array(numCities);
+		
+		// Creo el array con las líneas del camino
+		this.pathLines = new Array(numCities);
+		
+		// Relleno el array de las ciudades
+		for (i=0; i<numCities; i++)
+		{
+			this.cities[i] = new Array(2);
+		}
+		
+		// Creo las líneas
+		for (i=0; i<numCities; i++)
+		{
+			var l = doc.createElementNS(svgNS, 'line');
+			l.setAttribute('stroke', this.cityDarkColor);
+			this.pathLines[i] = l;
+			root.appendChild(l);
+		}
+		
+		// Creo los rectángulos de las ciudades
+		for (i=0; i<numCities; i++)
+		{
+			var city = this.cities[i];
+			var c = doc.createElementNS(svgNS, 'rect');
+			c.setAttribute('width', '10');
+			c.setAttribute('height', '10');
+			c.setAttribute('opacity', '0.5');
+			c.setAttribute('fill', this.cityClearColor);
+			c.setAttribute('stroke', this.cityDarkColor);
+			this.cityRects[i] = c;
+			root.appendChild(c);
+		}
+		
+		// Armo la BB para las ciudades
+		this.citiesBB = new Array(2);
+		this.citiesBB[0] = new Array(2);
+		this.citiesBB[1] = new Array(2);
+		this.citiesBB[0][0] = x1;
+		this.citiesBB[0][1] = y1;
+		this.citiesBB[1][0] = x2;
+		this.citiesBB[1][1] = y2;
+		
+		// Pongo coordenadas aleatorias para las ciudades
+		this.randomizeCitiesPos();
+		
+		// Armo un camino aleatorio
+		this.randomizePath();
+		
+		// Actualizo los gráficos
+		this.update();		
+	}
+	
+	//
+	// Fin clase TSP
+	//
+	
+	//
+	// Clase Button
+	//
+	
+	// Márgenes
+	Button.prototype.xMargin = 9
+	Button.prototype.yMargin = 7
+	
+	// Colores
+	Button.prototype.activeDarkColor = '#556655';
+	Button.prototype.activeClearColor = '#aaccaa';
+	Button.prototype.hoveringClearColor = '#cceecc';
+	Button.prototype.disabledDarkColor = '#555555';
+	Button.prototype.disabledClearColor = '#aaaaaa';
+	
+	// Maneja cuando el cursor pasa arriba del botón
+	function onButtonMouseOver(evt)
+	{
+		evt.target.parentNode.firstChild.setAttribute('fill', '#cceecc');
+	}
+	
+	// Maneja cuando el cursor se va de arriba del botón
+	function onButtonMouseOut(evt)
+	{
+		evt.target.parentNode.firstChild.setAttribute('fill', '#aaccaa');
+	}
+	
+	// Deshabilita el botón
+	Button.prototype.disable = function()
+	{
+		// Marco que está deshabilitado
+		this.enabled = false;
+		
+		// Deshabilito las callbacks
+		this.group.setAttribute('onmousedown', null);
+		this.group.setAttribute('onmouseover', null);
+		this.group.setAttribute('onmouseout', null);
+		
+		// Le cambio el color para indicar que está deshabilitado
+		this.rect.setAttribute('fill', this.disabledClearColor);
+		this.rect.setAttribute('stroke', this.disabledDarkColor);
+		this.text.setAttribute('fill', this.disabledDarkColor);
+	}
+	
+	// Habilita el botón
+	Button.prototype.enable = function()
+	{
+		// Le cambio el color para indicar que está activo
+		this.rect.setAttribute('fill', this.activeClearColor);
+		this.rect.setAttribute('stroke', this.activeDarkColor);
+		this.text.setAttribute('fill', this.activeDarkColor);
+		
+		// Habilito las callbacks
+		this.group.setAttribute('onmousedown', this.callback);
+		this.group.setAttribute('onmouseover', 'onButtonMouseOver(evt)');
+		this.group.setAttribute('onmouseout', 'onButtonMouseOut(evt)');
+		
+		// Marco que está habilitado
+		this.enabled = true;
+	}
+	
+	// Indica si el botón está habilitado
+	Button.prototype.isEnabled = function()
+	{
+		return this.enabled;
+	}
+	
+	// Constructor de un botón con las coordenadas, el texto y la callback
+	function Button(x, y, txt, callback)
+	{
+		// Creo el texto
+		t = doc.createElementNS(svgNS, 'text');
+		t.setAttribute('fill', this.activeDarkColor);
+		t.setAttribute('font-weight', 'bold');
+		t.setAttribute('font-size', '18');
+		t.appendChild(doc.createCDATASection(txt));
+		
+		// Creo un rectángulo que envuelva al texto, con su esquina superior izquierda en las coordenadas dadas
+		r = doc.createElementNS(svgNS, 'rect');
+		r.setAttribute('x', x);
+		r.setAttribute('y', y);
+		
+		// Creo un grupo con ambos elementos y los agrego al documento
+		g = doc.createElementNS(svgNS, 'g');
+		g.appendChild(r);
+		g.appendChild(t);
+		root.appendChild(g);
+		
+		// Obtengo el tamaño del rectángulo
+		txtRect = t.getBBox();
+		
+		// Hago un resize del rectángulo para que pueda contener al texto
+		r.setAttribute('width', txtRect.width + 2 * this.xMargin);
+		r.setAttribute('height', txtRect.height + 2 * this.yMargin);
+		
+		// Muevo al texto a una posición más centrada
+		t.setAttribute('x', x + this.xMargin);
+		t.setAttribute('y', y + this.yMargin + txtRect.height);
+		
+		// Guardo los atributos
+		this.text = t;
+		this.rect = r;
+		this.group = g;
+		this.x = x;
+		this.y = y;
+		this.msg = txt;
+		this.callback = callback;
+		this.enabled = true;
+		
+		// Activo al botón
+		this.enable();
+	}
+	
+	//
+	// Fin clase Button
+	//
+	
+	// Inicializa el documento
+	function startup(evt)
+	{
+		// Obtengo el destino del evento
+		O = evt.target;
+		
+		// A partir de él, obtengo el documento
+		doc = O.ownerDocument;
+		
+		// Obtengo el root a usar
+		root = doc.getElementById('drawArea');
+		
+		// Agrego los botones al documento
+		resetButton = new Button(140, 370, 'Reset', 'reset()');
+		startButton = new Button(230, 370, 'Start', 'startAnnealing()');
+		pauseButton = new Button(307, 370, 'Pause', 'pauseAnnealing()');
+		
+		// Creo el problema
+		tsp = new TSP(10, 15, 15, 485, 315);
+		
+		// Empiezo con un reset
+		reset();
+	}
+	]]></script>
+	<rect id="bg" x="0" y="0" width="100%" height="100%" stroke="#666655" fill="#eeeecc" />
+	<g id="drawArea">
+		<rect id="frame" x="10" y="10" width="480" height="310" stroke="#666655" fill="#eeeecc" onmousedown="showStats(evt)" />
+		<rect id="progressIndicFrame" x="50" y="340" width="400" height="10" stroke="#666655" fill="#eeeecc" />
+		<rect id="progressIndicFill" x="50" y="340" width="0" height="10" stroke="#666655" fill="#666655" />
+	</g>
+</svg>
