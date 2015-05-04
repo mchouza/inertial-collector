@@ -1,0 +1,1 @@
+The game consists of picking up items scattered in outer space with a spaceship and following Newton's Laws.
